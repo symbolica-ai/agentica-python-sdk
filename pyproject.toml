@@ -1,0 +1,97 @@
+[project]
+name = "symbolica-agentica"
+version = "0.3.1"
+description = "Agentica Python SDK"
+requires-python = ">=3.12.0,<3.14.0"
+readme = "README.md"
+license-files = ["LICENSE", ]
+dependencies = [
+    "aiohttp>=3.12.15",
+    "dotenv>=0.9.9",
+    "fastmcp<=2.12.3",
+    "httpx>=0.28.1",
+    "websockets>=15.0.1",
+    "agentica-internal",
+    # OpenTelemetry for distributed tracing
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.20.0",
+    "opentelemetry-instrumentation-httpx>=0.41b0",
+    "platformdirs>=4.5.0",
+    "rich>=14.2.0",
+    "prompt-toolkit>=3.0.52",
+    "pydantic>=2.12.4",
+]
+
+[project.urls]
+Homepage = "https://www.symbolica.ai/agentica"
+Issues = "https://github.com/symbolica-ai/agentica-issues"
+
+[project.scripts]
+symbolica-agentica = "agentica.__main__:cli"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+    "pytest-cov>=7.0.0",
+    "pytest-timeout>=2.4.0",
+    "respx>=0.22.0",
+    "ruff>=0.14.5",
+    "vulture>=2.14",
+    "pydantic>=2.11.9",
+    "numpy>=2.3.5",
+    "pandas>=2.3.3",
+]
+demos = [
+    "art>=6.5",
+    "exa-py>=1.15.6",
+    "ipynb>=0.5.1",
+    "jupyter>=1.1.1",
+    "markdown>=3.9",
+    "matplotlib>=3.10.6",
+    "pandas>=2.3.3",
+    "rich>=14.1.0",
+    "slack-sdk>=3.36.0",
+    "validators>=0.35.0",
+    "xhtml2pdf>=0.2.17",
+]
+
+
+[build-system]
+requires = ["setuptools>=80", "wheel", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src", "."]
+include = ["agentica*", "demos*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.md"]
+
+[tool.setuptools_scm]
+version_scheme = "guess-next-dev"
+local_scheme = "no-local-version"
+
+[tool.uv]
+link-mode = "symlink"
+
+[tool.uv.sources]
+# agentica-internal comes from PyPI, if you want to build it locally, specify the path here
+
+[tool.pytest.ini_options]
+addopts = "--cov=src --cov-report=html"
+filterwarnings = [
+    "ignore:Pickle, copy, and deepcopy support will be removed from itertools:DeprecationWarning",
+    "ignore:unclosed database in <sqlite3.Connection object at:ResourceWarning",
+]
+
+
+[tool.vulture]
+exclude = [
+    "src/agentica/development/",
+    "src/sandbox/build/"
+]
+ignore_names = []
+paths = ["src/"]
+min_confidence = 80

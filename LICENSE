@@ -1,0 +1,77 @@
+Symbolica Source-Available License (Agentica SDK) Version 1.0 (with Apache-style patent grant) 
+
+Licensor: Symbolica AI, Inc. (“Licensor”) 
+Licensed Work: The Agentica SDK and all associated source code, documentation, and example projects (the “Licensed Work”). 
+Licensee: Any person or entity exercising rights under this License (“you”). 
+Contributor: Any person or entity that submits code or other material to Licensor and/or the Licensed Work that is incorporated into the project by Licensor (“Contributor”). 
+
+Change License: Apache License, Version 2.0 (the “Change License”). 
+Change Date: None designated as of the effective date of this License. Licensor may designate a Change Date for a given version of the Licensed Work in the project repository or other official documentation. 
+
+1. Grant of Rights (Permitted Use) 
+1.1 Subject to the terms of this License, the Licensor grants you a worldwide, non-exclusive, non-transferable, royalty-free license to: 
+(a) use, copy, and modify the Licensed Work; 
+(b) create derivative works of the Licensed Work; and 
+(c) distribute the Licensed Work and any derivative works, 
+
+in each case of (a), (b) and (c), solely for Permitted Use as defined in Section 1.2. 
+
+1.2 “Permitted Use” means any use of the Licensed Work or derivative works, whether commercial or non-commercial, that does not constitute a Restricted Service (as defined in Section 4). For clarity, Permitted Use includes (subject to Section 4), without limitation: 
+(a) internal use of the Licensed Work or derivative works within your organization, including in production and revenue-generating operations; 
+(b) using the Licensed Work or derivative works to build or operate your own applications, products, or services, including paid services, provided that customers do not receive the Licensed Work or derivative works themselves as a general-purpose framework, SDK, or hosted platform. 
+
+1.3 Any use of the Licensed Work or derivative works that constitutes a Restricted Service is outside the scope of this License and requires a separate written agreement with Licensor. 
+
+2. Redistribution Conditions (Permitted Use Only) 
+
+2.1 You may distribute the Licensed Work or derivative works, in source or object form, for Permitted Use only, provided that: 
+(a) you include a copy of this License with any distribution; 
+(b) you retain all copyright notices and relevant attribution and license notices in the Licensed Work and derivative works; 
+(c) you clearly indicate any changes you have made to the Licensed Work; and 
+(d) you ensure that any recipients are subject to terms that are at least as protective of the Licensed Work as this License with respect to Restricted Services. 
+
+2.2 You may not represent your modifications as being endorsed by the Licensor or any Contributor. 
+
+3. Patent License and Retaliation 
+
+3.1 Subject to the terms of this License, each Contributor grants you a perpetual, worldwide, non-exclusive, royalty-free patent license to make, have made, use, sell, offer to sell, import, and otherwise use the Licensed Work and derivative works, but only to the extent that such use would otherwise infringe patents that are necessarily infringed by that Contributor’s contributions alone or by combination of their contributions with the Licensed Work. 
+
+3.2 If you or your employer initiate a patent claim alleging that the Licensed Work or any contribution to it infringes a patent, any patent licenses granted to you under this License automatically terminate as of the date the claim is filed. 
+
+4. Restricted Service 
+
+4.1 “Restricted Service” means, whether or not you charge a fee, any of the following: 
+(a) Offering or providing the Licensed Work or derivative works as a managed or hosted service whose primary purpose is to provide a general-purpose agent, orchestration, or workflow framework to third parties (for example, “Agentica-as-a-service” or a substantially equivalent hosted framework). 
+(b) Offering or providing a product, application or service that exposes the APIs, semantics, or programming model of the Licensed Work such that third parties can use it as a general-purpose agent framework, SDK, or platform, substantially substitutable for the Licensed Work. 
+(c) Selling, licensing, leasing, lending, renting, conveying or distributing the Licensed Work or derivative works to third parties in a way where they receive the Licensed Work or derivative works primarily as a general-purpose agent framework, SDK, library, or platform (whether on-premise or hosted), rather than as part of a broader application-specific solution. 
+
+4.2 The following, without limitation, are not Restricted Services: 
+(a) internal use of the Licensed Work or derivative works solely within your organization, including in production and revenue-generating operations; provided, that, such internal use does not include any application or use case expressly prohibited by Section 4.1; 
+(b) using the Licensed Work or derivative works as a component inside your own applications, products, or services (including paid SaaS or on-premise software) where customers do not receive the Licensed Work or derivative works thereof, or any service or application incorporating or based on the Licensed Work or any derivative works thereof, as a general-purpose agent, orchestration, workflow, framework, SDK, or platform; and 
+(c) providing consulting, implementation, or integration services to help third parties deploy the Licensed Work for their own internal use, so long as you are not operating a multi-tenant or general-purpose hosted Agentica-like framework for them. 
+
+4.3 Any Restricted Service requires a separate written commercial agreement with Licensor. Without such an agreement, you may not use, copy, modify, or distribute the Licensed Work or derivative works in a way that constitutes a Restricted Service. 
+
+5. Future Licensing and Change License 
+
+5.1 Licensor may, at its discretion, designate a Change Date for a particular version of the Licensed Work in the project repository or other official documentation. On or after the Change Date, Licensor may make that version of the Licensed Work available under the Change License in addition to this License. 
+
+5.2 Any such change will not affect the terms applicable to your existing copy of the Licensed Work under this License unless you choose to use the Licensed Work under the Change License. 
+
+5.3 Licensor may release future versions of the Licensed Work under different license terms. Such changes will not affect the terms applicable to any version of the Licensed Work you have already received under this License. 
+
+6. Trademarks This License does not grant you any rights in the trade names, trademarks, service marks, or logos of Licensor or its affiliates, including “Symbolica” or “Agentica.” You may not use such marks except as permitted by applicable law or separate written agreement. 
+
+7. Disclaimer of Warranty THE LICENSED WORK IS PROVIDED “AS IS” AND “AS AVAILABLE,” WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, OR NON-INFRINGEMENT. YOU USE THE LICENSED WORK AT YOUR OWN RISK. 
+
+8. Limitation of Liability TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT WILL THE LICENSOR OR ANY CONTRIBUTOR BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR FOR ANY LOSS OF PROFITS OR REVENUE, ARISING OUT OF OR IN CONNECTION WITH THIS LICENSE OR THE USE OF THE LICENSED WORK, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES. 
+
+9. Termination 
+
+9.1 This License terminates automatically if you materially breach any of its terms and fail to cure that breach within thirty (30) days after receiving notice of the breach. 
+
+9.2 Upon termination, you must cease using and distributing the Licensed Work and any derivative works. Sections 3, 7, and 8, and any other provisions which by their nature should survive, will continue to apply after termination. 
+
+10. Governing Law This License is governed by the laws of the State of California, excluding its conflict-of-law principles. 
+
+END OF LICENSE
