@@ -68,6 +68,7 @@ from .common import (
     DEFAULT_AGENT_MODEL,
     MaxTokens,
     ModelStrings,
+    ReasoningEffort,
     Usage,
     _find_parent_invocation,
     _find_parent_local_id,
@@ -103,6 +104,7 @@ class Agent(LogBase):
     __json: bool
     __model: ModelStrings
     __max_tokens: MaxTokens
+    __reasoning_effort: ReasoningEffort | None
     __logging: bool
     _listener: AgentListener | None
     _prepare_fn: Callable[[], Any]
@@ -130,6 +132,7 @@ class Agent(LogBase):
         # fmt off because pyright needs this to be on one line
         listener: Callable[[], AgentListener] | DefaultAgentListener | None = DEFAULT_AGENT_LISTENER,
         max_tokens: int | MaxTokens = MaxTokens.default(),
+        reasoning_effort: ReasoningEffort | None = None,
         _world: SDKWorld | None = None,
         _logging: bool = False,
         _call_depth: int = 0,
@@ -174,6 +177,10 @@ class Agent(LogBase):
         max_tokens : int | MaxTokens
             When an integer is supplied, this is the maximum number of tokens for an invocation.
             For more fine-grained control, a `MaxTokens` object may be passed.
+        reasoning_effort : 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | None
+            Constrains thinking budget on reasoning models which support it (gpt 5.2, sonnet 4.5, gemini 3, etc...)
+            Higher values use more reasoning tokens but may produce better results.
+            If None, uses the model's default reasoning effort.
 
         Note
         ----
@@ -222,6 +229,7 @@ class Agent(LogBase):
         self.__json = False
         self.__model = model
         self.__max_tokens = MaxTokens.from_max_tokens(max_tokens)
+        self.__reasoning_effort = reasoning_effort
         self.__mcp = mcp
         self._world = _world or SDKWorld(logging=_logging)
         self.__name = premise[:10] + '...' if premise else 'anonymous'
@@ -256,6 +264,7 @@ class Agent(LogBase):
         mcp: str | None = None,
         model: ModelStrings = DEFAULT_AGENT_MODEL,
         max_tokens: int | MaxTokens = MaxTokens.default(),
+        reasoning_effort: ReasoningEffort | None = None,
         listener: Callable[[], AgentListener]
         | DefaultAgentListener
         | None = DEFAULT_AGENT_LISTENER,
@@ -301,6 +310,10 @@ class Agent(LogBase):
         max_tokens : int | MaxTokens
             When an integer is supplied, this is the maximum number of tokens for an invocation.
             For more fine-grained control, a `MaxTokens` object may be passed.
+        reasoning_effort : 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | None
+            Constrains thinking budget on reasoning models which support it (gpt 5.2, sonnet 4.5, gemini 3, etc...)
+            Higher values use more reasoning tokens but may produce better results.
+            If None, uses the model's default reasoning effort.
 
         Note
         ----
@@ -315,6 +328,7 @@ class Agent(LogBase):
             system=system,
             model=model,
             max_tokens=max_tokens,
+            reasoning_effort=reasoning_effort,
             mcp=mcp,
             listener=listener,
             _logging=_logging,
@@ -351,6 +365,7 @@ class Agent(LogBase):
                     max_tokens_per_invocation=self.__max_tokens.per_invocation,
                     max_tokens_per_round=self.__max_tokens.per_round,
                     max_rounds=self.__max_tokens.rounds,
+                    reasoning_effort=self.__reasoning_effort,
                 )
                 self.log(f"Creating agent {cmar=}")
                 self.__uid = await csm.new_agent(cmar)
@@ -848,6 +863,7 @@ async def spawn(
     model: ModelStrings = DEFAULT_AGENT_MODEL,
     listener: Callable[[], AgentListener] | DefaultAgentListener | None = DEFAULT_AGENT_LISTENER,
     max_tokens: int | MaxTokens = MaxTokens.default(),
+    reasoning_effort: ReasoningEffort | None = None,
     _logging: bool = False,
     _call_depth: int = 0,
 ) -> Agent:
@@ -890,6 +906,10 @@ async def spawn(
     max_tokens : int | MaxTokens
         When an integer is supplied, this is the maximum number of tokens for an invocation.
         For more fine-grained control, a `MaxTokens` object may be passed.
+    reasoning_effort : 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | None
+        Constrains thinking budget on reasoning models which support it (gpt 5.2, sonnet 4.5, gemini 3, etc...)
+        Higher values use more reasoning tokens but may produce better results.
+        If None, uses the model's default reasoning effort.
 
     Returns
     -------
@@ -910,6 +930,7 @@ async def spawn(
         mcp=mcp,
         model=model,
         max_tokens=max_tokens,
+        reasoning_effort=reasoning_effort,
         listener=listener,
         _logging=_logging,
         _call_depth=_call_depth + 1,

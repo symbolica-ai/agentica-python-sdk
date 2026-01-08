@@ -30,6 +30,7 @@ then the full chat histories for individual agents are written to files, which l
 ```
 """
 
+import threading
 from functools import cache
 from pathlib import Path
 from typing import Literal, TextIO, override
@@ -41,6 +42,9 @@ from ..agent_logger import AgentLogger, LogId
 DEFAULT_LOGS_DIR_NAME = "logs"
 DEFAULT_AGENT_FILE_PREFIX = "agent-"
 DEFAULT_AGENT_FILE_SUFFIX = ".log"
+
+# Lock for thread-safe agent ID assignment
+_agent_id_lock = threading.Lock()
 
 
 # Terminal color constants
@@ -99,10 +103,20 @@ class StandardLogger(AgentLogger):
     @override
     def on_spawn(self) -> None:
         if self.local_id is None:
-            self.local_id = self._get_next_agent_id()
-            self.logs_file = self._new_agent_log_file(self.local_id)
+            # Lock to prevent race condition when multiple agents spawn concurrently
+            with _agent_id_lock:
+                self.local_id = self._get_next_agent_id()
+                self.logs_file = self._new_agent_log_file(self.local_id)
             self._color = _id_to_color(self.local_id)
-        print(f"{GREY}Spawned {self._color}Agent {self.local_id} {GREY}({self.logs_file}){RESET}")
+
+        file_path = self.logs_file
+        try:
+            file_path = file_path.relative_to(Path.cwd(), walk_up=False) if file_path else None
+        except ValueError:
+            pass
+
+        file_path_str = f" {GREY}({file_path}){RESET}" if file_path else ""
+        print(f"{GREY}Spawned {self._color}Agent {self.local_id}{file_path_str}){RESET}")
 
     @override
     def on_call_enter(self, user_prompt: str, parent_local_id: LogId | None = None) -> None:
@@ -163,7 +177,7 @@ class StandardLogger(AgentLogger):
         return self._log_file_io
 
     def __del__(self) -> None:
-        if self._log_file_io is not None:
+        if hasattr(self, '_log_file_io') and self._log_file_io is not None:
             self._log_file_io.close()
 
     def _get_next_agent_id(self) -> int:

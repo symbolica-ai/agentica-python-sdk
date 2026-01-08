@@ -9,6 +9,7 @@ import asyncio
 import atexit
 import logging
 import signal
+import threading
 import weakref
 from functools import partial
 from typing import Any, Callable, Coroutine
@@ -86,7 +87,9 @@ def _get_or_create_entry(loop: asyncio.AbstractEventLoop | None = None) -> _Loop
     if loop not in _registry:
         _registry[loop] = _LoopEntry(loop)
         loop.close = partial(_patched_close, loop)  # type: ignore
-        loop.add_signal_handler(signal.SIGINT, partial(_on_sigint, loop))
+        # Signal handlers can only be registered from the main thread
+        if threading.current_thread() is threading.main_thread():
+            loop.add_signal_handler(signal.SIGINT, partial(_on_sigint, loop))
 
     return _registry[loop]
 

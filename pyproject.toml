@@ -1,6 +1,6 @@
 [project]
 name = "symbolica-agentica"
-version = "0.3.1"
+version = "0.3.2"
 description = "Agentica Python SDK"
 requires-python = ">=3.12.0,<3.14.0"
 readme = "README.md"

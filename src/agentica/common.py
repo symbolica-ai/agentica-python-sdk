@@ -9,12 +9,14 @@ from logging import getLogger
 from typing import TYPE_CHECKING, Any, Callable, Literal, Self, Union, overload
 
 from agentica_internal.core.unset import UNSET, Unset
+from agentica_internal.session_manager_messages import ReasoningEffort
 
 logger = getLogger(__name__)
 
 __all__ = [
     'ModelStrings',
     'ToolModeStrings',
+    'ReasoningEffort',
     'DEFAULT_AGENT_MODEL',
     'Role',
     'Chunk',
