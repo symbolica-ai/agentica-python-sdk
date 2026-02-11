@@ -8,10 +8,10 @@ from types import CodeType, FunctionType
 from typing import Any, Callable
 
 from agentica_internal.core.log import LogBase
-from agentica_internal.cpython.function import func_arg_names
 from agentica_internal.repl import REPL_VAR
 from agentica_internal.warpc import forbidden
 from agentica_internal.warpc.worlds.sdk_world import SDKWorld
+from openai.types.responses import ResponseUsage
 
 from agentica.agent import DEFAULT_AGENT_LISTENER, DefaultAgentListener
 from agentica.client_session_manager import INVALID_UID
@@ -19,7 +19,7 @@ from agentica.coming_soon import check_return_type_supported
 from agentica.logging.agent_listener import AgentListener
 
 from .agent import Agent
-from .common import DEFAULT_AGENT_MODEL, MaxTokens, ModelStrings, Usage
+from .common import DEFAULT_AGENT_MODEL, MaxTokens, ModelStrings, sum_usages
 
 __all__ = ['AgenticFunction']
 
@@ -43,8 +43,6 @@ class AgenticFunction[**I, O](LogBase):
     __persist: bool
     __persistent_agent: Agent | None
     __model: ModelStrings
-    __arg_names: tuple[str, ...]
-    __json: bool
     __max_tokens: MaxTokens
     __listener_constructor: Callable[[], AgentListener] | DefaultAgentListener | None
     __logging: bool
@@ -67,16 +65,14 @@ class AgenticFunction[**I, O](LogBase):
     __signature__: inspect.Signature
 
     # Usage tracking for a single agentic function
-    __total_usage: Usage
-    __last_usage: Usage | None
-    __usages: dict[str, Usage]
+    __last_usage: ResponseUsage | None
+    __usages: dict[str, ResponseUsage]
 
     def __init__(
         self,
         /,
         wrapped: Callable[I, O],
         globals: dict[str, Any],
-        json: bool = False,
         system: str | None = None,
         premise: str | None = None,
         persist: bool = False,
@@ -99,8 +95,6 @@ class AgenticFunction[**I, O](LogBase):
         self.__persistent_agent = None
         self.__model = model
         self.__max_tokens = MaxTokens.from_max_tokens(max_tokens)
-        self.__arg_names = func_arg_names(wrapped)
-        self.__json = json
         self.__mcp = mcp
         self.__listener_constructor = listener
         self.__cached_globals_world = None
@@ -127,7 +121,7 @@ class AgenticFunction[**I, O](LogBase):
             raise ValueError('Your agentic function must be annotated with an explicit return type')
         # Yes, async function have unadulterated `return` type annotations (i.e. not wrapped in `Future` or whatnot).
         self.__return_type = self.__wrapped__.__annotations__['return']
-        check_return_type_supported(self.__return_type, mode='json' if self.__json else 'code')
+        check_return_type_supported(self.__return_type)
 
         self.__global_scope[REPL_VAR.SELF_FN] = self.__wrapped__
         self.__global_scope[REPL_VAR.RETURN_TYPE] = self.__return_type
@@ -137,7 +131,6 @@ class AgenticFunction[**I, O](LogBase):
         if self.__system and self.__premise:
             raise TypeError("`system` and `premise` are mutually exclusive arguments")
 
-        self.__total_usage = Usage(0, 0, 0)
         self.__last_usage = None
         self.__usages = {}
 
@@ -205,7 +198,6 @@ class AgenticFunction[**I, O](LogBase):
             # fetch usage
             try:
                 self.__last_usage = agent.last_usage()
-                self.__total_usage += self.__last_usage
                 assert (iid := agent.last_iid) is not None
                 self.__usages[iid] = self.__last_usage
             except:
@@ -218,13 +210,14 @@ class AgenticFunction[**I, O](LogBase):
                 # the server
                 await agent.close()
 
-    def last_usage(self) -> Usage:
+    def last_usage(self) -> ResponseUsage:
         if self.__last_usage is None:
             raise ValueError("No call has been made yet")
         return self.__last_usage
 
-    def total_usage(self) -> Usage:
-        return self.__total_usage
+    def total_usage(self) -> ResponseUsage:
+        """Get the total usage across all invocations."""
+        return sum_usages(self.__usages.values())
 
     def _set_prepare_fn(self, fn: Callable) -> None:
         # used for testing

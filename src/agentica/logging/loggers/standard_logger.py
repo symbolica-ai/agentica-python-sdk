@@ -30,6 +30,7 @@ then the full chat histories for individual agents are written to files, which l
 ```
 """
 
+import json
 import threading
 from functools import cache
 from pathlib import Path
@@ -152,16 +153,58 @@ class StandardLogger(AgentLogger):
 
     @override
     async def on_chunk(self, chunk: Chunk) -> None:
+        if self.local_id is None:
+            raise ValueError("on_chunk should be called only after on_spawn")
+
         chunk_log = ""
+
+        # Handle usage type - JSON data inside <usage> tags within agent message
+        if chunk.type == 'usage':
+            # Usage is part of the agent's response
+            if self._current_role != 'agent':
+                # Start agent message block if not already in one
+                if self._current_role is None:
+                    chunk_log = '<message role="agent">\n'
+                else:
+                    chunk_log = '\n</message>\n<message role="agent">\n'
+                self._current_role = chunk.role
+            # Pretty-print the JSON for readability
+            try:
+                usage_dict = json.loads(chunk.content)
+                pretty_json = json.dumps(usage_dict, indent=2)
+                indented = pretty_json.replace('\n', '\n\t')
+                chunk_log += f'\n\t<usage>\n\t{indented}\n\t</usage>\n'
+            except json.JSONDecodeError:
+                chunk_log += f'\n\t<usage>{chunk.content}</usage>\n'
+            handle = self._log_file_handle()
+            _ = handle.write(chunk_log)
+            handle.flush()
+            return
+
+        # Handle reasoning type - goes inside the agent message block with <reasoning> tags
+        if chunk.type == 'reasoning':
+            # Reasoning is part of the agent's response, format with <reasoning> tags
+            if self._current_role != 'agent':
+                # Start agent message block if not already in one
+                if self._current_role is None:
+                    chunk_log = '<message role="agent">\n'
+                else:
+                    chunk_log = '\n</message>\n<message role="agent">\n'
+                self._current_role = chunk.role  # Will be AgentRole
+            indented_content = chunk.content.replace("\n", "\n\t")
+            chunk_log += f'\t<reasoning>\n\t{indented_content}\n\t</reasoning>\n'
+            handle = self._log_file_handle()
+            _ = handle.write(chunk_log)
+            handle.flush()
+            return
+
+        # Regular chunk handling
         if chunk.role != self._current_role:
             if self._current_role is None:
                 chunk_log = f'<message role="{chunk.role}">\n\t'
             else:
                 chunk_log = f'\n</message>\n<message role="{chunk.role}">\n\t'
             self._current_role = chunk.role
-
-        if self.local_id is None:
-            raise ValueError("on_chunk should be called only after on_spawn")
 
         chunk_log += f'{chunk.content.replace("\n", "\n\t")}'
 

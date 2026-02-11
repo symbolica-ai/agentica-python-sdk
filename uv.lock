@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.12.0, <3.14.0"
 resolution-markers = [
     "python_full_version >= '3.13'",
@@ -36,6 +36,9 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "numpy", specifier = ">=2.4.1" },
+    { name = "pandas", specifier = ">=3.0.0" },
+    { name = "pydantic", specifier = ">=2.12.5" },
     { name = "pyright", specifier = ">=1.1.406" },
     { name = "pytest", specifier = ">=8.4.1" },
     { name = "pytest-asyncio", specifier = ">=1.2.0" },
@@ -43,6 +46,9 @@ dev = [
     { name = "pytest-subtests", specifier = ">=0.14.2" },
     { name = "pytest-timeout", specifier = ">=2.4.0" },
     { name = "ruff", specifier = ">=0.14.5" },
+    { name = "scikit-image", specifier = ">=0.26.0" },
+    { name = "scipy", specifier = ">=1.17.0" },
+    { name = "sympy", specifier = ">=1.14.0" },
     { name = "vulture", specifier = ">=2.14" },
 ]
 
@@ -3183,6 +3189,7 @@ dependencies = [
     { name = "dotenv" },
     { name = "fastmcp" },
     { name = "httpx" },
+    { name = "openai" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-grpc" },
     { name = "opentelemetry-instrumentation-httpx" },
@@ -3228,6 +3235,7 @@ requires-dist = [
     { name = "dotenv", specifier = ">=0.9.9" },
     { name = "fastmcp", specifier = "<=2.12.3" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "openai", specifier = ">=1.66.0" },
     { name = "opentelemetry-api", specifier = ">=1.20.0" },
     { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.20.0" },
     { name = "opentelemetry-instrumentation-httpx", specifier = ">=0.41b0" },

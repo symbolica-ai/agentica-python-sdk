@@ -68,12 +68,15 @@ class AgentListener:
 
     # We need .listen() to block until the connection is actually established
     connected: asyncio.Event
+    # Signals when the current invocation's echo stream is done (all chunks processed)
+    invocation_done: asyncio.Event
 
     def __init__(self, logger: AgentLogger) -> None:
         self.logger = logger
         self._listen_task = None
         self._previous_loggers = dict()
         self.connected = asyncio.Event()
+        self.invocation_done = asyncio.Event()
 
     async def listen(self, csm: ClientSessionManager, uid: str, iid: str | None = None) -> None:
         if self._listen_task is not None:
@@ -81,12 +84,19 @@ class AgentListener:
             raise AlreadyListening("listen should be called only once")
 
         # Create listening task on /echo/{uid}/{iid} endpoint
-        async def log_chat_history(connected=self.connected) -> None:
+        async def log_chat_history(
+            connected=self.connected, invocation_done=self.invocation_done
+        ) -> None:
             while True:
                 async for chunk in csm.echo(uid, iid, connected=connected):
+                    if chunk.type == "invocation_exit":
+                        invocation_done.set()
+                        continue
                     # These must be sent sequentially.
                     logger = self.logger
                     await logger.on_chunk(chunk)
+                # Echo stream ended for this invocation (all chunks processed)
+                invocation_done.set()
                 self.connected.clear()
 
         if self._listen_task is None:

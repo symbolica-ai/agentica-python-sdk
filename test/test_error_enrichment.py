@@ -99,7 +99,6 @@ class TestClientSessionManagerErrorEnrichment:
             streaming=False,
             doc="test",
             system="test",
-            json=False,
         )
 
         # Mock HTTP response with 500 error

@@ -1,15 +1,10 @@
 import collections.abc as A
 import io
-import itertools
-import sqlite3
 import tempfile
 import typing as T
 from dataclasses import dataclass
-from types import ModuleType
 from urllib.parse import ParseResult, urlparse
 
-import numpy as np
-import pandas as pd
 import pytest
 from agentica_internal.warpc.resource.handle import ResourceHandle
 from pydantic import BaseModel
@@ -60,40 +55,7 @@ class TestValidateFeature:
         ]
 
         for feature in features:
-            with pytest.raises(ComingSoon):
-                check_value_supported(feature)
-
-    def test_modules(self):
-        features = [
-            ModuleType('my_module'),
-            itertools,  # actual module
-            io,  # actual module
-        ]
-
-        for feature in features:
-            with pytest.raises(ComingSoon):
-                check_value_supported(feature)
-
-    def test_numerical_data(self):
-        features = [
-            np.array([1, 2, 3]),
-            np.zeros((3, 3)),
-            np.ones(5),
-        ]
-
-        for feature in features:
-            with pytest.raises(ComingSoon):
-                check_value_supported(feature)
-
-    def test_tabular_data(self):
-        features = [
-            pd.DataFrame({'a': [1, 2, 3]}),
-            pd.Series([1, 2, 3]),
-        ]
-
-        for feature in features:
-            with pytest.raises(ComingSoon):
-                check_value_supported(feature)
+            check_value_supported(feature)
 
     def test_url_objects(self):
         features = [
@@ -102,20 +64,7 @@ class TestValidateFeature:
         ]
 
         for feature in features:
-            with pytest.raises(ComingSoon):
-                check_value_supported(feature)
-
-    def test_c_extensions_detected(self):
-        with sqlite3.connect(':memory:') as conn:
-            with pytest.raises(ComingSoon) as exc_info:
-                check_value_supported(conn)
-            assert exc_info.value.feature == Feature.C_EXTENSIONS
-
-        bio = io.BytesIO(b'test')
-        check_value_supported(bio)
-
-        with open(__file__, 'r') as f:
-            check_value_supported(f)
+            check_value_supported(feature)
 
 
 class TestValidateReturn:
@@ -138,132 +87,28 @@ class TestValidateReturn:
         with pytest.raises(ComingSoon):
             check_return_type_supported(A.Callable[..., int])
 
-    def test_builtin_subclasses(self):
-        check_return_type_supported(int)
-        check_return_type_supported(list)
-        check_return_type_supported(bool)
-        check_return_type_supported(str)
-        check_return_type_supported(dict)
-
-        class int2(int): ...
-
-        class list2(int): ...
-
-        class bool2(int): ...
-
-        class str2(str): ...
-
-        class dict2(dict): ...
-
-        with pytest.raises(ComingSoon):
-            check_return_type_supported(int2)
-
-        with pytest.raises(ComingSoon):
-            check_return_type_supported(list2)
-
-        with pytest.raises(ComingSoon):
-            check_return_type_supported(bool2)
-
-        with pytest.raises(ComingSoon):
-            check_return_type_supported(str2)
-
-        with pytest.raises(ComingSoon):
-            check_return_type_supported(dict2)
-
-    def test_advanced_iterators(self):
-        features = [
-            itertools.count,
-            itertools.cycle,
-            itertools.chain,
-        ]
-
-        for feature in features:
-            with pytest.raises(ComingSoon):
-                check_return_type_supported(feature)
-            with pytest.raises(ComingSoon):
-                check_return_type_supported(feature, mode='json')
-
-    def test_ranges(self):
-        with pytest.raises(ComingSoon):
-            check_return_type_supported(range)
-        with pytest.raises(ComingSoon):
-            check_return_type_supported(range, mode='json')
-
-    def test_modules(self):
-        with pytest.raises(ComingSoon):
-            check_return_type_supported(ModuleType)
-        with pytest.raises(ComingSoon):
-            check_return_type_supported(ModuleType, mode='json')
-
-    def test_numerical_data(self):
-        with pytest.raises(ComingSoon):
-            check_return_type_supported(np.ndarray)
-        with pytest.raises(ComingSoon):
-            check_return_type_supported(np.ndarray, mode='json')
-
-    def test_tabular_data(self):
-        features = [
-            pd.DataFrame,
-            pd.Series,
-        ]
-
-        for feature in features:
-            with pytest.raises(ComingSoon):
-                check_return_type_supported(feature)
-            with pytest.raises(ComingSoon):
-                check_return_type_supported(feature, mode='json')
-
     def test_url_objects(self):
-        with pytest.raises(ComingSoon):
-            check_return_type_supported(ParseResult)
-        with pytest.raises(ComingSoon):
-            check_return_type_supported(ParseResult, mode='json')
+        check_return_type_supported(ParseResult)
 
     def test_custom_dataclasses(self):
         @dataclass
         class MyDataClass:
             value: int
 
-        check_return_type_supported(MyDataClass, mode='code')
-        check_return_type_supported(MyDataClass, mode='json')
+        check_return_type_supported(MyDataClass)
 
     def test_pydantic_models(self):
         class MyModel(BaseModel):
             value: int
             name: str
 
-        with pytest.raises(ComingSoon) as exc_info:
-            check_return_type_supported(MyModel, mode='code')
-        assert exc_info.value.feature == Feature.PYDANTIC_MODELS
-
-        with pytest.raises(ComingSoon) as exc_info:
-            check_return_type_supported(MyModel, mode='json')
-        assert exc_info.value.feature == Feature.PYDANTIC_MODELS
+        check_return_type_supported(MyModel)
 
         instance = MyModel(value=42, name="test")
-        with pytest.raises(ComingSoon) as exc_info:
-            check_value_supported(instance, mode='code')
-        assert exc_info.value.feature == Feature.PYDANTIC_MODELS
-
-        with pytest.raises(ComingSoon) as exc_info:
-            check_value_supported(instance, mode='json')
-        assert exc_info.value.feature == Feature.PYDANTIC_MODELS
+        check_value_supported(instance)
 
     def test_binary_buffers(self):
-        features = [
-            bytearray,
-        ]
-
-        for feature in features:
-            with pytest.raises(ComingSoon):
-                check_return_type_supported(feature)
-            with pytest.raises(ComingSoon):
-                check_return_type_supported(feature, mode='json')
-
-    def test_c_extensions_detected_return(self):
-        with pytest.raises(ComingSoon) as exc_info:
-            check_return_type_supported(sqlite3.Connection)
-        assert exc_info.value.feature == Feature.C_EXTENSIONS
+        check_return_type_supported(bytearray)
 
     def test_cross_agent(self):
         class VirtualClass:
@@ -276,3 +121,14 @@ class TestValidateReturn:
         with pytest.raises(ComingSoon) as exc_info:
             check_value_supported(VirtualClass)
         assert exc_info.value.feature == Feature.CROSS_AGENT
+
+
+class TestExceptionMessages:
+    """Tests that exception messages contain the value/type information."""
+
+    def test_check_return_type_supported_includes_callable(self):
+        """check_return_type_supported should include Callable in exception for callable types."""
+        with pytest.raises(ComingSoon) as exc_info:
+            check_return_type_supported(T.Callable[..., int])
+        error_str = str(exc_info.value)
+        assert "typing.Callable[..., int]" in error_str

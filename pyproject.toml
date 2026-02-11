@@ -1,10 +1,10 @@
 [project]
 name = "symbolica-agentica"
-version = "0.3.2"
+version = "0.4.0"
 description = "Agentica Python SDK"
 requires-python = ">=3.12.0,<3.14.0"
 readme = "README.md"
-license-files = ["LICENSE", ]
+license-files = ["LICENSE"]
 dependencies = [
     "aiohttp>=3.12.15",
     "dotenv>=0.9.9",
@@ -21,6 +21,7 @@ dependencies = [
     "rich>=14.2.0",
     "prompt-toolkit>=3.0.52",
     "pydantic>=2.12.4",
+    "openai>=1.66.0",
 ]
 
 [project.urls]
@@ -69,10 +70,6 @@ include = ["agentica*", "demos*"]
 [tool.setuptools.package-data]
 "*" = ["*.md"]
 
-[tool.setuptools_scm]
-version_scheme = "guess-next-dev"
-local_scheme = "no-local-version"
-
 [tool.uv]
 link-mode = "symlink"
 
@@ -88,10 +85,7 @@ filterwarnings = [
 
 
 [tool.vulture]
-exclude = [
-    "src/agentica/development/",
-    "src/sandbox/build/"
-]
+exclude = ["src/agentica/development/", "src/sandbox/build/"]
 ignore_names = []
 paths = ["src/"]
 min_confidence = 80

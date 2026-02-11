@@ -39,6 +39,7 @@ from agentica_internal.repl import REPL_VAR
 from agentica_internal.session_manager_messages import CreateAgentRequest
 from agentica_internal.warpc import forbidden
 from agentica_internal.warpc.worlds.sdk_world import SDKWorld
+from openai.types.responses import ResponseUsage
 from typing_extensions import deprecated
 
 from agentica.agentica_client.global_csm import current_global_csm, get_global_csm
@@ -66,16 +67,17 @@ from agentica.unmcp.mcp_function import MCPFunction
 
 from .common import (
     DEFAULT_AGENT_MODEL,
+    CacheTTL,
     MaxTokens,
     ModelStrings,
     ReasoningEffort,
-    Usage,
     _find_parent_invocation,
     _find_parent_local_id,
     _reset_current_invocation,
     _reset_current_local_id,
     _set_current_invocation,
     _set_current_local_id,
+    sum_usages,
 )
 
 __all__ = ['Agent', 'DEFAULT_AGENT_LISTENER']
@@ -96,12 +98,10 @@ class Agent(LogBase):
     # Agentica
     __uid: str
     __last_iid: str | None
-    __last_total: Usage | None
-    __usages: dict[str, Usage]  # iid -> usage
+    __usages: dict[str, ResponseUsage]  # iid -> usage
     __init_lock: asyncio.Lock
     __global_scope: dict[str, Any]
     __mcp: str | None
-    __json: bool
     __model: ModelStrings
     __max_tokens: MaxTokens
     __reasoning_effort: ReasoningEffort | None
@@ -110,6 +110,7 @@ class Agent(LogBase):
     _prepare_fn: Callable[[], Any]
     _after_fn: Callable[[], Any]
     __listener_constructor: Callable[[], AgentListener] | None
+    __cache_ttl: CacheTTL | None
     _world: SDKWorld
     _globals_payload: bytes | None
     __name: str
@@ -133,6 +134,7 @@ class Agent(LogBase):
         listener: Callable[[], AgentListener] | DefaultAgentListener | None = DEFAULT_AGENT_LISTENER,
         max_tokens: int | MaxTokens = MaxTokens.default(),
         reasoning_effort: ReasoningEffort | None = None,
+        cache_ttl: CacheTTL | None = None,
         _world: SDKWorld | None = None,
         _logging: bool = False,
         _call_depth: int = 0,
@@ -181,6 +183,12 @@ class Agent(LogBase):
             Constrains thinking budget on reasoning models which support it (gpt 5.2, sonnet 4.5, gemini 3, etc...)
             Higher values use more reasoning tokens but may produce better results.
             If None, uses the model's default reasoning effort.
+        cache_ttl : '5m' | '1h' | None
+            Controls how long Anthropic prompt caching entries persist.
+            Only used for Anthropic models; ignored for other providers.
+            '5m' is the default Anthropic cache duration. '1h' costs more but caches longer.
+            If None, passes None through to underlying providerm which in Anthropic's
+            case maps to a cache_ttl of '5m'.
 
         Note
         ----
@@ -201,7 +209,6 @@ class Agent(LogBase):
             self._listener = None
         self.__uid = INVALID_UID
         self.__last_iid = None
-        self.__last_total = None
         self.__usages = {}
         self.__init_lock = asyncio.Lock()
         # this is needed because functions *are* just agents, but
@@ -226,10 +233,10 @@ class Agent(LogBase):
             self.__global_scope = {REPL_VAR.ROLE: _role}
             # todo: issue a message here!
             self._globals_payload = None
-        self.__json = False
         self.__model = model
         self.__max_tokens = MaxTokens.from_max_tokens(max_tokens)
         self.__reasoning_effort = reasoning_effort
+        self.__cache_ttl = cache_ttl  # Only used for Anthropic models
         self.__mcp = mcp
         self._world = _world or SDKWorld(logging=_logging)
         self.__name = premise[:10] + '...' if premise else 'anonymous'
@@ -245,7 +252,7 @@ class Agent(LogBase):
             if k.startswith('_') and not k.startswith('__'):
                 raise ValueError(f"Global scope key {k} cannot start with an underscore")
             try:
-                check_value_supported(v, mode='json' if self.__json else 'code')
+                check_value_supported(v)
             except Exception as e:
                 e.add_note(f"{k} is not supported")
                 raise e
@@ -265,6 +272,7 @@ class Agent(LogBase):
         model: ModelStrings = DEFAULT_AGENT_MODEL,
         max_tokens: int | MaxTokens = MaxTokens.default(),
         reasoning_effort: ReasoningEffort | None = None,
+        cache_ttl: CacheTTL | None = None,
         listener: Callable[[], AgentListener]
         | DefaultAgentListener
         | None = DEFAULT_AGENT_LISTENER,
@@ -314,6 +322,11 @@ class Agent(LogBase):
             Constrains thinking budget on reasoning models which support it (gpt 5.2, sonnet 4.5, gemini 3, etc...)
             Higher values use more reasoning tokens but may produce better results.
             If None, uses the model's default reasoning effort.
+        cache_ttl : '5m' | '1h' | None
+            Controls how long Anthropic prompt caching entries persist.
+            Only used for Anthropic models; ignored for other providers.
+            '5m' is the default Anthropic cache duration. '1h' costs more but caches longer.
+            If None, uses the default ephemeral cache (5 minutes).
 
         Note
         ----
@@ -329,6 +342,7 @@ class Agent(LogBase):
             model=model,
             max_tokens=max_tokens,
             reasoning_effort=reasoning_effort,
+            cache_ttl=cache_ttl,
             mcp=mcp,
             listener=listener,
             _logging=_logging,
@@ -359,13 +373,13 @@ class Agent(LogBase):
                     doc=self.__doc__,
                     system=maybe_prompt_template(self.__system__) if self.__system__ else None,
                     warp_globals_payload=self._globals_payload,
-                    json=self.__json,
                     model=self.__model,
                     streaming=False,
                     max_tokens_per_invocation=self.__max_tokens.per_invocation,
                     max_tokens_per_round=self.__max_tokens.per_round,
                     max_rounds=self.__max_tokens.rounds,
                     reasoning_effort=self.__reasoning_effort,
+                    cache_ttl=self.__cache_ttl,
                 )
                 self.log(f"Creating agent {cmar=}")
                 self.__uid = await csm.new_agent(cmar)
@@ -615,26 +629,21 @@ class Agent(LogBase):
 
     # getting usage
 
-    async def _fetch_usage(self, iid: str) -> Usage:
+    async def _fetch_usage(self, iid: str) -> ResponseUsage:
         csm = current_global_csm()
         if csm is None:
             raise ValueError("Called before client session manager was created")
-        # Fetch logs for this invocation and and sum usages
-        total = Usage(0, 0, 0)
-        logs = await csm.logs(self.__uid, iid, {'type': 'sm_inference_usage'})
-        for log in logs:
-            # Additional filter to ensure we only process usage logs
-            if 'usage' in log:
-                total += Usage.from_completions(log['usage'], last_usage=total)
 
-        usage = total
-        if self.__last_total is not None:
-            usage -= self.__last_total.replace(output_tokens=0)
+        logs = await csm.logs(self.__uid, iid, {'type': 'sm_inference_usage'})
+        usage = sum_usages(
+            ResponseUsage.model_validate(log['usage'])
+            for log in logs
+            if 'usage' in log
+        )
         self.__usages[iid] = usage
-        self.__last_total = total
         return usage
 
-    def last_usage(self) -> Usage:
+    def last_usage(self) -> ResponseUsage:
         """Get the usage for the last invocation."""
         if self.__last_iid is None:
             raise ValueError("No invocation has been made yet")
@@ -642,9 +651,9 @@ class Agent(LogBase):
             raise ValueError(f"Usage not found for invocation {self.__last_iid}")
         return self.__usages[self.__last_iid]
 
-    def total_usage(self) -> Usage:
+    def total_usage(self) -> ResponseUsage:
         """Get the total usage across all invocations."""
-        return sum(self.__usages.values(), Usage(0, 0, 0))
+        return sum_usages(self.__usages.values())
 
     async def _get_invocation(
         self,
@@ -656,17 +665,16 @@ class Agent(LogBase):
     ) -> "_AgentInvocation":
         self.log("_get_invocation()")
 
-        mode = 'json' if self.__json else 'code'
         for name, tool in tools.items():
             if name.startswith('_'):
                 raise ValueError(f"Globals name {name} cannot start with an underscore")
-            check_value_supported(tool, mode)
+            check_value_supported(tool)
 
         tools[REPL_VAR.RETURN_TYPE] = return_type
         tools[REPL_VAR.TASK_DESCRIPTION] = str(task_desc)
 
         csm = await get_global_csm()
-        check_return_type_supported(return_type, mode)
+        check_return_type_supported(return_type)
 
         # Insert return type into scope if not already present
         is_plain_return_type = isinstance(return_type, type)
@@ -793,6 +801,10 @@ class _AgentInvocation:
             _reset_current_invocation(invocation_token)
 
             if self.listener is not None:
+                # Wait for the echo stream to finish processing all chunks for this invocation
+                # This ensures usage and other final chunks are logged before closing
+                await asyncio.wait_for(self.listener.invocation_done.wait(), timeout=2.0)
+                self.listener.invocation_done.clear()  # Reset for next invocation
                 self.log('calling listener on_call_exit')
                 self.listener.logger.on_call_exit(result)
 
@@ -864,6 +876,7 @@ async def spawn(
     listener: Callable[[], AgentListener] | DefaultAgentListener | None = DEFAULT_AGENT_LISTENER,
     max_tokens: int | MaxTokens = MaxTokens.default(),
     reasoning_effort: ReasoningEffort | None = None,
+    cache_ttl: CacheTTL | None = None,
     _logging: bool = False,
     _call_depth: int = 0,
 ) -> Agent:
@@ -910,6 +923,11 @@ async def spawn(
         Constrains thinking budget on reasoning models which support it (gpt 5.2, sonnet 4.5, gemini 3, etc...)
         Higher values use more reasoning tokens but may produce better results.
         If None, uses the model's default reasoning effort.
+    cache_ttl : '5m' | '1h' | None
+        Controls how long Anthropic prompt caching entries persist.
+        Only used for Anthropic models; ignored for other providers.
+        '5m' is the default Anthropic cache duration. '1h' costs more but caches longer.
+        If None, uses the default ephemeral cache (5 minutes).
 
     Returns
     -------
@@ -931,6 +949,7 @@ async def spawn(
         model=model,
         max_tokens=max_tokens,
         reasoning_effort=reasoning_effort,
+        cache_ttl=cache_ttl,
         listener=listener,
         _logging=_logging,
         _call_depth=_call_depth + 1,

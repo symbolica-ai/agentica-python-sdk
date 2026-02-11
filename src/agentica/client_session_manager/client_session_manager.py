@@ -30,10 +30,8 @@ from agentica_internal.multiplex_protocol import (
 from agentica_internal.session_manager_messages.session_manager_messages import CreateAgentRequest
 from agentica_internal.telemetry.otel import *
 from agentica_internal.warpc.worlds.base_world import QUIT
-from opentelemetry import trace
 from websockets import ClientConnection
 
-from agentica.coming_soon import JsonModeComingSoon
 from agentica.common import AgentRole, Chunk, make_role
 from agentica.errors import (
     ClientServerOutOfSyncError,
@@ -100,6 +98,15 @@ def raise_for_status(response: httpx.Response, session_id: str | None = None) ->
 
 
 @dataclass
+class SessionManagerConnection:
+    """Encapsulates state for a single session manager's WebSocket connection."""
+
+    websocket: ClientConnection
+    send_queue: Queue[MultiplexClientMessage]
+    tasks: tuple[Task[None], Task[None]]  # (reader, writer)
+
+
+@dataclass
 class AgentInvocationHandle:
     send_message: Callable[[bytes], Coroutine[None, None, None]]
     recv_message: Callable[[], Coroutine[None, None, bytes]]
@@ -144,12 +151,14 @@ INVALID_UID = "INVALID"
 class ClientSessionManager(LogBase):
     LOG_TAGS = 'csm'
 
-    _websocket: ClientConnection | None
-    _websocket_lock: asyncio.Lock  # Lock to prevent concurrent websocket creation
-    _tasks: tuple[Task[None], Task[None]] | None
+    # Per-session-manager WebSocket state (replaces single global WebSocket)
+    _session_managers: dict[str, SessionManagerConnection]  # sm_id -> connection state
+    _sm_locks: dict[str, asyncio.Lock]  # sm_id -> creation lock
+    _uid_to_sm: dict[str, str]  # agent uid -> sm_id
+
+    # Per-agent state (unchanged - keyed by uid)
     _uid_iid_recv_queue: dict[str, dict[str, Queue[bytes]]]
     _uid_iid_future: dict[str, dict[str, Future[Result]]]
-    _send_queue: Queue[MultiplexClientMessage]
 
     _match_iid: dict[str, Future[str]]
     _known_uids: set[str]
@@ -161,7 +170,7 @@ class ClientSessionManager(LogBase):
     _running: bool = False
 
     # OpenTelemetry spans for lifecycle tracking
-    _session_span: OSpan  # Entire SDK session lifetime, and the WebSocket connection span
+    _session_span: OSpan  # Entire SDK session lifetime
 
     # Cleanup management
     _cleanup_callback: Callable[[], None] | None
@@ -181,12 +190,13 @@ class ClientSessionManager(LogBase):
     ):
         super().__init__()
         self.log_name = 'ClientSessionManager'
-        self._websocket = None
-        self._websocket_lock = asyncio.Lock()
-        self._tasks = None
+        # Per-session-manager WebSocket state
+        self._session_managers = {}
+        self._sm_locks = {}
+        self._uid_to_sm = {}
+        # Per-agent state
         self._uid_iid_recv_queue = dict()
         self._uid_iid_future = dict()
-        self._send_queue = Queue()
         self._match_iid = dict()
 
         self._known_uids = set()
@@ -286,35 +296,51 @@ class ClientSessionManager(LogBase):
             enrich_error(error, session_id=self._client_session_id, error_log_path=ERROR_LOG_PATH)
             raise error from e
 
-    async def _ws_background_task_writer(self) -> None:
-        ws = self._websocket
-        assert ws is not None
+    def _is_websocket_open(self, smc: SessionManagerConnection | None) -> bool:
+        """Check if the session manager connection and its websocket are open."""
+        return (
+            smc is not None
+            and smc.websocket is not None
+            and smc.websocket.state == websockets.State.OPEN
+        )
 
-        with self.log_as('writer') as ctx:
-            send_queue = self._send_queue
+    async def _sm_writer(self, sm_id: str) -> None:
+        """Background writer task for a specific session manager's WebSocket."""
+        smc = self._session_managers.get(sm_id)
+        if smc is None:
+            return
+
+        with self.log_as('writer', sm_id) as ctx:
             try:
-                while True:
-                    msg = await send_queue.get()
-                    self.log(f"Sending {msg=}")
-                    ctx.log(' ->', msg)
-                    if not self._is_websocket_open():
+                while self._is_websocket_open(smc):
+                    msg = await smc.send_queue.get()
+
+                    # Re-check after await (socket may have closed while waiting)
+                    if not self._is_websocket_open(smc):
                         break
+
+                    self.log(f"Sending {msg=} to {sm_id=}")
+                    ctx.log(' ->', msg)
                     try:
-                        await ws.send(multiplex_to_json(msg))
+                        await smc.websocket.send(multiplex_to_json(msg))
                     except CancelledError:
-                        self.log("Background writer task was cancelled")
+                        self.log(f"Writer task for {sm_id=} was cancelled")
                         break
                     except Exception as e:
-                        self.log(f"Background writer task encountered an error {e}")
+                        self.log(f"Writer task for {sm_id=} encountered an error {e}")
                         await sleep(0.25)
-                        continue
             except CancelledError:
                 pass
+            finally:
+                await self._cleanup_session_manager(sm_id)
 
-    async def _ws_background_task_reader(self) -> None:
+    async def _sm_reader(self, sm_id: str) -> None:
+        """Background reader task for a specific session manager's WebSocket."""
+        smc = self._session_managers.get(sm_id)
+        if smc is None:
+            return
+
         get_match = self._match_iid.get
-        ws = self._websocket
-        assert ws is not None
 
         def process_msg(msg: MultiplexServerMessage, ctx) -> None:
             match msg:
@@ -386,19 +412,17 @@ class ClientSessionManager(LogBase):
                                 f"Received an error message for an unknown uid/iid: {uid}/{iid}"
                             )
 
-        with self.log_as('reader') as ctx:
+        with self.log_as('reader', sm_id) as ctx:
             try:
-                while True:
-                    if not self._is_websocket_open():
-                        break
+                while self._is_websocket_open(smc):
                     msg_bytes = None
                     try:
-                        msg_bytes = await ws.recv()
+                        msg_bytes = await smc.websocket.recv()
                     except CancelledError:
-                        self.log("Background reader task was cancelled")
+                        self.log(f"Reader task for {sm_id=} was cancelled")
                         break
                     except Exception as e:
-                        self.log(f"Background reader task encountered an error {e}")
+                        self.log(f"Reader task for {sm_id=} encountered an error {e}")
                         await sleep(0.25)
                         continue
                     if type(msg_bytes) is not bytes:
@@ -408,36 +432,41 @@ class ClientSessionManager(LogBase):
                         server_msg = multiplex_from_json(msg_bytes)
                     except:
                         continue
-                    self.log(f"Received {server_msg=}")
+                    self.log(f"Received {server_msg=} from {sm_id=}")
                     if isinstance(server_msg, MultiplexServerMessage):
                         ctx.log(' <-', server_msg)
                         process_msg(server_msg, ctx)
             except CancelledError:
                 pass
+            finally:
+                await self._cleanup_session_manager(sm_id)
 
-    async def _ensure_websocket_connection(self, uid: str) -> None:
-        # Start connection-level span that will last for the WebSocket's lifetime
-        # Make it a child of the SESSION span, not the new_agent span
-        # This prevents parent-ends-before-child violations
+    async def _ensure_sm_connection(self, sm_id: str) -> None:
+        """Ensure a WebSocket connection exists for the given session manager.
 
-        # Fast path: if websocket already exists, return immediately
-        if self._is_websocket_open():
+        Each session manager gets its own WebSocket connection, send queue, and reader/writer tasks.
+        Multiple agents on the same session manager share the same WebSocket.
+        """
+        # Fast path: session manager already connected
+        if sm_id in self._session_managers:
             return
 
-        async with self._websocket_lock:
-            if self._is_websocket_open():
+        # Lazy-create lock for this session manager
+        lock = self._sm_locks.setdefault(sm_id, asyncio.Lock())
+        async with lock:
+            # Double-check after acquiring lock
+            if sm_id in self._session_managers:
                 return
 
             connection_span = None
             websocket_uri = f"{self._base_ws}/socket"
             if tracer := self._tracer:
-                self._session_span = span_start(tracer, "sdk.websocket_connection")
-                connection_span = self._session_span
-                span_set_attribute(connection_span, "agent.uid", uid)
+                connection_span = span_start(tracer, "sdk.sm_connection")
+                span_set_attribute(connection_span, "session_manager.id", sm_id)
                 span_set_attribute(connection_span, "websocket.uri", websocket_uri)
 
             try:
-                self.log(f"Dialing {websocket_uri=} for {uid=}")
+                self.log(f"Dialing {websocket_uri=} for {sm_id=}")
 
                 headers = (
                     {"Authorization": f"Bearer {self._agentica_api_key}"}
@@ -450,25 +479,78 @@ class ClientSessionManager(LogBase):
                 if connection_span:
                     span_inject(connection_span, headers)
 
-                self._websocket = await websockets.connect(
+                ws = await websockets.connect(
                     websocket_uri,
                     ping_interval=20,
                     ping_timeout=None,
                     max_size=None,
                     additional_headers=headers,
                 )
-                self.log(f"Spawning background tasks for {uid=}")
-                self._tasks = (
-                    create_task(self._ws_background_task_reader(), name="CSM.ws_reader"),
-                    create_task(self._ws_background_task_writer(), name="CSM.ws_writer"),
+
+                # Create per-session-manager send queue
+                send_queue: Queue[MultiplexClientMessage] = Queue()
+
+                self.log(f"Spawning background tasks for {sm_id=}")
+                tasks = (
+                    create_task(self._sm_reader(sm_id), name=f"CSM.reader.{sm_id}"),
+                    create_task(self._sm_writer(sm_id), name=f"CSM.writer.{sm_id}"),
+                )
+
+                # Store session manager connection state
+                self._session_managers[sm_id] = SessionManagerConnection(
+                    websocket=ws,
+                    send_queue=send_queue,
+                    tasks=tasks,
                 )
 
                 if connection_span:
                     connection_span.set_attribute("websocket.state", "connected")
 
             except Exception as e:
-                span_finish(self._session_span, e)
+                if connection_span:
+                    span_finish(connection_span, e)
                 raise
+
+    async def _cleanup_session_manager(self, sm_id: str) -> None:
+        """Clean up a single session manager's resources without affecting others.
+
+        This is called when a session manager's WebSocket connection closes or errors.
+        It gracefully shuts down the session manager's resources and fails any pending
+        futures for agents on that session manager.
+        """
+        smc = self._session_managers.pop(sm_id, None)
+        self._sm_locks.pop(sm_id, None)
+        if smc is None:
+            return  # Already cleaned up or never existed
+
+        self.log(f"Cleaning up session manager {sm_id}")
+
+        # Cancel tasks (don't await - they may be the caller)
+        for task in smc.tasks:
+            if not task.done():
+                task.cancel()
+
+        # Close WebSocket
+        try:
+            await smc.websocket.close()
+        except Exception as e:
+            self.log(f"Error closing WebSocket for {sm_id}: {e}")
+
+        # Find and clean up agents on this session manager
+        affected_uids = [uid for uid, sid in self._uid_to_sm.items() if sid == sm_id]
+        for uid in affected_uids:
+            self._uid_to_sm.pop(uid, None)
+            self._known_uids.discard(uid)
+
+            # Fail pending futures for this agent
+            if uid in self._uid_iid_future:
+                for iid, future in self._uid_iid_future[uid].items():
+                    if not future.done():
+                        future.set_exception(
+                            WebSocketConnectionError(f"Session manager {sm_id} connection closed")
+                        )
+
+        self.log(f"Cleaned up session manager {sm_id}, affected {len(affected_uids)} agent(s)")
 
     async def new_agent(self, cmar: CreateAgentRequest) -> str:
         # Link to session span to build proper hierarchy
@@ -476,9 +558,6 @@ class ClientSessionManager(LogBase):
 
         try:
             with self.log_as('new_agent') as log_ctx:
-                if cmar.json:
-                    raise JsonModeComingSoon()
-
                 cmar.protocol = f"python/{__version__}"
 
                 print_model_notice(cmar.model)
@@ -510,19 +589,25 @@ class ClientSessionManager(LogBase):
                                 if message:
                                     self.log(message)
 
-                        uid = response.text
-                        self.log(f"Heard {uid=} for {str(cmar)[:128]}")
+                        # Parse JSON response with uid and session_manager_id
+                        data = response.json()
+                        uid = data["uid"]
+                        sm_id = data["session_manager_id"]
+                        self.log(f"Heard {uid=}, {sm_id=} for {str(cmar)[:128]}")
 
                         # Add agent UID to span
                         span.set_attribute("agent.uid", uid) if span else None
+                        span.set_attribute("agent.session_manager_id", sm_id) if span else None
 
+                        # Track uid -> session manager mapping
+                        self._uid_to_sm[uid] = sm_id
                         self._known_uids.add(uid)
                         # Initialize per-agent state
                         self._uid_iid_recv_queue[uid] = dict()
                         self._uid_iid_future[uid] = dict()
 
-                        await self._ensure_websocket_connection(uid=uid)
-                        log_ctx.log('uid =', uid)
+                        await self._ensure_sm_connection(sm_id=sm_id)
+                        log_ctx.log('uid =', uid, ', sm_id =', sm_id)
                         return uid
                 except Exception as e:
                     if span:
@@ -588,9 +673,11 @@ class ClientSessionManager(LogBase):
                 {"agent.uid": uid, "agent.task_desc": task_desc, "invocation.streaming": streaming},
             )
 
-            if not self.uid_resource_exists(uid):
+            # Get session manager for this agent
+            sm_id = self._uid_to_sm.get(uid)
+            if sm_id is None or sm_id not in self._session_managers:
                 error = WebSocketConnectionError(
-                    "WebSocket for this agent is not open, the connection to the server has been lost."
+                    "No connection for agent's session manager. The connection may have been lost."
                 )
                 enrich_error(
                     error,
@@ -600,6 +687,9 @@ class ClientSessionManager(LogBase):
                 )
                 span_finish(invoke_span, error)
                 raise error
+
+            smc = self._session_managers[sm_id]
+            span_set_attribute(invoke_span, "agent.session_manager_id", sm_id)
 
             try:
                 match_id = self.id_issuer()
@@ -617,10 +707,10 @@ class ClientSessionManager(LogBase):
 
                 match_iid = self._match_iid
                 recv_queues = self._uid_iid_recv_queue
-                send_queue = self._send_queue
+                send_queue = smc.send_queue  # Use session-manager-specific send queue
                 futures = self._uid_iid_future
 
-                if not self._is_websocket_open() or send_queue is None:
+                if sm_id not in self._session_managers:
                     assert_unrecoverable(uid=uid, session_id=self._client_session_id)
 
                 match_iid[match_id] = iid_future = Future()
@@ -665,14 +755,21 @@ class ClientSessionManager(LogBase):
                 span_finish(invoke_span, e)
                 raise
 
-    def _is_websocket_open(self) -> bool:
-        """Check if the websocket connection is open."""
-        val = self._websocket is not None and self._websocket.state == websockets.State.OPEN
-        self.log(f"Websocket open = {val}")
-        return val
+    def _is_sm_connected(self, sm_id: str) -> bool:
+        """Check if a specific session manager's WebSocket connection is open."""
+        smc = self._session_managers.get(sm_id)
+        if smc is None:
+            return False
+        return smc.websocket.state == websockets.State.OPEN
 
     def uid_resource_exists(self, uid: str) -> bool:
-        return uid in self._known_uids and self._is_websocket_open()
+        """Check if an agent's resources exist and its session manager connection is open."""
+        if uid not in self._known_uids:
+            return False
+        sm_id = self._uid_to_sm.get(uid)
+        if sm_id is None:
+            return False
+        return self._is_sm_connected(sm_id)
 
     def agent_exists(self, uid: str) -> bool:
         return self.uid_resource_exists(uid)
@@ -680,9 +777,10 @@ class ClientSessionManager(LogBase):
     async def close_agent(self, uid: str) -> None:
         self.log(f"Closing agent {uid[:8]}")
 
-        # Clean up per-agent state (shared websocket/tasks remain)
+        # Clean up per-agent state
         self._uid_iid_recv_queue.pop(uid, None)
         self._uid_iid_future.pop(uid, None)
+        self._uid_to_sm.pop(uid, None)
         self._known_uids.discard(uid)
 
         self.log(f"Closed agent {uid[:8]}")
@@ -734,6 +832,10 @@ class ClientSessionManager(LogBase):
                         # for this agent and should continue across invocations.
                         if iid is not None:
                             break
+                        # When listening across all invocations (iid is None),
+                        # signal the end of this invocation without closing the stream.
+                        yield Chunk(AgentRole(), "", "invocation_exit")
+                        is_streaming = False  # if this invocation was streaming, we don't want to accidentally mark the next invocation as streaming
                         continue
 
                     # yield back the raw streaming text chunks + other roles
@@ -746,75 +848,51 @@ class ClientSessionManager(LogBase):
                         if body.get("type", None) == "stream_chunk":
                             is_streaming = True
                             delta = body["args"][0]
-                            yield Chunk(AgentRole(), delta["content"])
+                            yield Chunk(AgentRole(), delta["content"], delta.get("type"))
                         elif body.get("type", None) == "delta":
                             delta = body["args"][0]
                             role = make_role(delta["role"], delta.get("username", None))
                             if role == "system":
                                 # system: hidden, just clutter
                                 continue
-                            if is_streaming and role == "agent":
+                            if (
+                                is_streaming
+                                and role == "agent"
+                                # exception: even when streaming we want to send usage because it's not sent any other way
+                                and delta.get("type", None) != "usage"
+                            ):
                                 continue
-                            yield Chunk(role, delta["content"])
+                            yield Chunk(role, delta["content"], delta.get("type"))
 
     async def close(self) -> None:
         self._running = False
         agent_count = len(self._known_uids)
-        self.log(f"Closing ClientSessionManager with {agent_count} agent(s)")
+        sm_count = len(self._session_managers)
+        self.log(
+            f"Closing ClientSessionManager with {agent_count} agent(s) on {sm_count} session manager(s)"
+        )
 
         # Close all agents (cleans up per-agent state and destroys on server)
         for uid in list(self._known_uids):
             await self.close_agent(uid)
 
-        # Close the WebSocket connection first (this will cause reader/writer to exit)
-        if self._is_websocket_open():
-            ws = self._websocket
-            assert ws is not None
+        # Close all session manager connections
+        for sm_id in list(self._session_managers.keys()):
             try:
-                self.log("Closing the websocket")
-                await ws.close()
-
-                # End the connection span when closing
-                if self._session_span:
-                    span_set_attribute(self._session_span, "websocket.state", "closed")
-                    span_end(self._session_span)
+                await self._cleanup_session_manager(sm_id)
             except Exception as exc:
-                # Record error on connection span before ending
-                if self._session_span:
-                    self._session_span.record_exception(exc)
-                    self._session_span.set_status(trace.Status(trace.StatusCode.ERROR, str(exc)))
-                    self._session_span.end()
-                # websocket close failures are expected during atexit
-                # (websockets are bound to the original event loop which is dead)
-                self.log(f"Failed to close websocket: {exc}")
-            finally:
-                self._websocket = None
+                # Session manager cleanup failures are expected during atexit
+                self.log(f"Failed to cleanup session manager {sm_id}: {exc}")
 
-        # Cancel background tasks and await them to finish
-        if self._tasks is not None:
-            reader_task, writer_task = self._tasks
-            reader_task.cancel()
-            writer_task.cancel()
-            try:
-                await reader_task
-            except CancelledError:
-                pass
-            except Exception:
-                pass
-            try:
-                await writer_task
-            except CancelledError:
-                pass
-            except Exception:
-                pass
-            self._tasks = None
-
-        # Reset send queue for potential reuse
-        self._send_queue = Queue()
+        # Clear any remaining state
+        self._session_managers.clear()
+        self._sm_locks.clear()
+        self._uid_to_sm.clear()
 
         # End session span when closing the entire ClientSessionManager
         if session_span := self._session_span:
             session_span.set_attribute("sdk.agents_created", agent_count)
+            session_span.set_attribute("sdk.session_managers_used", sm_count)
             session_span.end()
             self._session_span = None
 

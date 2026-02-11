@@ -56,13 +56,19 @@ class StreamLogger(AgentLogger):
     _sentinel: _Sentinel
     _streaming_token: Token[bool] | None
     _on_chunk: Callable[[Chunk], Awaitable[None]] | None
+    _include_usage: bool
 
-    def __init__(self, on_chunk: Callable[[Chunk], Awaitable[None]] | None = None) -> None:
+    def __init__(
+        self,
+        on_chunk: Callable[[Chunk], Awaitable[None]] | None = None,
+        include_usage: bool = False,
+    ) -> None:
         self.local_id = None
         self._sentinel = _Sentinel()
         self._queue = asyncio.Queue()
         self._streaming_token = None
         self._on_chunk = on_chunk
+        self._include_usage = include_usage
 
     @override
     def should_stream(self) -> bool:
@@ -83,6 +89,8 @@ class StreamLogger(AgentLogger):
 
     @override
     async def on_chunk(self, chunk: Chunk) -> None:
+        if not self._include_usage and chunk.type == 'usage':
+            return
         await self._queue.put(chunk)
         if self._on_chunk is not None:
             await self._on_chunk(chunk)
