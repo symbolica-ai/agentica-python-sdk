@@ -7,21 +7,33 @@
 [![Discord](https://img.shields.io/discord/1470799122717085941?logo=discord&label=Discord)](https://discord.gg/bddGs8bb)
 [![Twitter](https://img.shields.io/twitter/follow/symbolica?style=flat&logo=x&label=Follow)](https://x.com/symbolica)
 
-[Agentica](https://agentica.symbolica.ai) is a type-safe AI framework that lets LLM agents integrate with your code—functions, classes, live objects, even entire SDKs. Instead of building MCP wrappers or brittle schemas, you pass references directly; the framework enforces your types at runtime, constrains return types, and manages agent lifecycle.
+[Agentica](https://agentica.symbolica.ai) is a type-safe AI framework that lets LLM agents integrate with your code: functions, classes, live objects, even entire SDKs. Instead of building MCP wrappers or brittle schemas, you pass references directly; the framework enforces your types at runtime, constrains return types, and manages agent lifecycle.
+
+## Prerequisites
+- Python ≥ 3.12.0, < 3.14.0
+- [uv](https://docs.astral.sh/uv/getting-started/installation/)
+
+## Installation
+
+```bash
+# With uv
+uv pip install symbolica-agentica
+```
+
+```bash
+# With pip
+pip install symbolica-agentica
+```
 
 ## Documentation
 
 The full documentation can be found at [docs.symbolica.ai](https://docs.symbolica.ai).
 
-## Prerequisites
-- Python ≥ 3.12.11
-- [uv](https://docs.astral.sh/uv/getting-started/installation/)
-
 ## Quick Start
 
-There are two ways to use the Agentica framework. You may install the package from [pypi](https://pypi.org/project/symbolica-agentica/) and sign up for an account on the [Symbolica Platform](https://www.symbolica.ai/login) to recieve $50 in free inference credits. This is the easiest way to get started.
+There are two ways to use the Agentica framework. You may install the package from [PyPI](https://pypi.org/project/symbolica-agentica/) and sign up for an account on the [Symbolica Platform](https://www.symbolica.ai/login) to receive $50 in free inference credits. This is the easiest way to get started.
 
-Alternatively if you wish to develop locally or BYOK you may set up and run a local copy of the server and framework. This requires more setup and is harder to get started.
+Alternatively if you wish to develop locally or BYOK you may set up and run a local copy of the server.
 
 To use the platform, get an API key from [here](https://www.symbolica.ai/login).
 
@@ -29,20 +41,14 @@ To use the platform, get an API key from [here](https://www.symbolica.ai/login).
 <summary><big><b>To BYOK follow these instructions</b></big></summary>
 <br>
 
-**1. Clone the SDK**
-
-```bash
-git clone https://github.com/symbolica-ai/agentica-python-sdk
-```
-
-**2. Clone and sync the [agentica-server](https://github.com/symbolica-ai/agentica-server)** (in one terminal):
+**1. Clone and sync the [agentica-server](https://github.com/symbolica-ai/agentica-server)** (in one terminal):
 
 ```bash
 git clone https://github.com/symbolica-ai/agentica-server
 cd agentica-server && uv sync
 ```
 
-**3. Set up your keys, inference endpoint, and run the server**
+**2. Set up your keys, inference endpoint, and run the server**
 
 ```bash
 export INFERENCE_API_KEY=<your-key>
@@ -60,29 +66,20 @@ uv run src/application/main.py \
 
 ### Run the chat demo
 
-The `agentica-chat` demo lets you chat with your Python REPL using the Agentica framework. You can use natural langauge to interact with objects, write and run code, and more.
+The `agentica-chat` demo lets you chat with your Python REPL using the Agentica framework. You can use natural language to interact with objects, write and run code, and more.
 
-#### Make the UV project
-
+Make the UV project:
 ```bash
 uv init agentica-chat
-cd agentica-chat ; uv sync
+cd agentica-chat
 ```
 
-#### If you are running on the Symbolica Platform
-
+Add agentica as a dependency:
 ```bash
-uv pip install symbolica-agentica
+uv add symbolica-agentica
 ```
 
-#### Or if you are running locally
-
-```bash
-uv add ../agentica-python-sdk
-```
-
-#### Create main.py
-
+Create `main.py`:
 ```python
 import asyncio
 from agentica import spawn
@@ -136,6 +133,35 @@ uv run python main.py
 ```bash
 export S_M_BASE_URL=http://localhost:2345
 uv run python main.py
+```
+
+
+## Build from source
+
+If you wish to build `symbolica-agentica` from source:
+```bash
+git clone https://github.com/symbolica-ai/agentica-python-sdk.git
+cd agentica-python-sdk
+```
+
+To make Agentica available in uv venv:
+```bash
+uv sync
+```
+
+To build the wheel:
+```bash
+uv build
+```
+
+Note that `symbolica-agentica` specifies [`agentica-internal`](https://github.com/symbolica-ai/agentica-internal) as a dependency. By default build and install commands take `agentica-internal` from PyPI.
+
+To use the locally cloned version of `symbolica-agentica` package in your project:
+```bash
+# to install it without specifying it as a dependency
+uv pip install /path/to/agentica-python-sdk
+# to add local version as a dependency, your local path will be hardcoded in pyproject.toml!
+uv add /path/to/agentica-python-sdk
 ```
 
 ## License

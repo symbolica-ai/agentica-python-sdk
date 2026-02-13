@@ -31,6 +31,8 @@ class StreamLogger(AgentLogger):
     Example:
     --------
 
+    Reconsuming the stream:
+
     ```python
     stream = StreamLogger()
     with stream:
@@ -49,6 +51,15 @@ class StreamLogger(AgentLogger):
         print(chunk, end="", flush=True)
     print()
     ```
+
+    Using ``on_chunk`` to forward chunks in real time:
+
+    ```python
+    async def forward(chunk: Chunk):
+        await websocket.send(chunk.content)
+
+    stream = StreamLogger(on_chunk=forward, include_usage=True)
+    ```
     """
 
     local_id: LogId | None
@@ -63,6 +74,20 @@ class StreamLogger(AgentLogger):
         on_chunk: Callable[[Chunk], Awaitable[None]] | None = None,
         include_usage: bool = False,
     ) -> None:
+        """
+        Parameters
+        ----------
+        on_chunk : Callable[[Chunk], Awaitable[None]] | None
+            An optional async callback invoked for every chunk as it arrives.
+            Receives the same ``Chunk`` objects yielded by the async iterator.
+            Useful for side-effects like sending chunks over a WebSocket without
+            having to consume the iterator yourself.
+        include_usage : bool
+            Whether to include usage-reporting chunks (``chunk.type == 'usage'``)
+            in the stream. Defaults to ``False``, which filters them out so that
+            consumers only see text content. Set to ``True`` if you need to
+            capture token usage statistics from the stream.
+        """
         self.local_id = None
         self._sentinel = _Sentinel()
         self._queue = asyncio.Queue()

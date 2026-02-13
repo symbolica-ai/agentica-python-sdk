@@ -156,6 +156,19 @@ def make_role(role: str, name: str | None = None) -> Role:
 
 @dataclass
 class Chunk:
+    """A single piece of streamed content from an agent invocation.
+
+    Attributes
+    ----------
+    role : Role
+        The role of the message sender ('agent', 'user', or 'system').
+    content : str
+        The text content of the chunk.
+    type : str | None
+        The kind of chunk: 'reasoning', 'output_text', 'code', 'usage',
+        'invocation_exit', or None for untyped chunks.
+    """
+
     role: Role
     content: str
     type: str | None = None  # 'reasoning', 'output_text', 'code', etc.

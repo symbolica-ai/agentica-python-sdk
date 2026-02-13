@@ -1,16 +1,16 @@
 [project]
 name = "symbolica-agentica"
-version = "0.4.0"
+version = "0.4.1"
 description = "Agentica Python SDK"
 requires-python = ">=3.12.0,<3.14.0"
 readme = "README.md"
 license-files = ["LICENSE"]
 dependencies = [
-    "aiohttp>=3.12.15",
-    "dotenv>=0.9.9",
-    "fastmcp<=2.12.3",
-    "httpx>=0.28.1",
-    "websockets>=15.0.1",
+    "aiohttp>=3.12.0",
+    "python-dotenv>=1.0.0",
+    "fastmcp>=2.10.0,<3.0.0",
+    "httpx>=0.28.0,<1.0.0",
+    "websockets>=15.0.0",
     "agentica-internal",
     # OpenTelemetry for distributed tracing
     "opentelemetry-api>=1.20.0",
@@ -18,15 +18,15 @@ dependencies = [
     "opentelemetry-exporter-otlp-proto-grpc>=1.20.0",
     "opentelemetry-instrumentation-httpx>=0.41b0",
     "platformdirs>=4.5.0",
-    "rich>=14.2.0",
-    "prompt-toolkit>=3.0.52",
-    "pydantic>=2.12.4",
+    "rich>=13.0.0",
+    "prompt-toolkit>=3.0.0",
+    "pydantic>=2.10.0",
     "openai>=1.66.0",
 ]
 
 [project.urls]
 Homepage = "https://www.symbolica.ai/agentica"
-Issues = "https://github.com/symbolica-ai/agentica-issues"
+Issues = "https://github.com/symbolica-ai/agentica-python-sdk/issues"
 
 [project.scripts]
 symbolica-agentica = "agentica.__main__:cli"

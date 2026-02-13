@@ -16,7 +16,7 @@ from agentica_internal.warpc import forbidden
 
 from agentica.agent import DEFAULT_AGENT_LISTENER, DefaultAgentListener
 from agentica.coming_soon import ComingSoon, Feature, check_value_supported
-from agentica.common import DEFAULT_AGENT_MODEL, MaxTokens
+from agentica.common import DEFAULT_AGENT_MODEL, CacheTTL, MaxTokens, ReasoningEffort
 from agentica.function import AgenticFunction, ModelStrings
 from agentica.logging.agent_listener import AgentListener
 
@@ -36,6 +36,8 @@ def agentic[**I, O](
     model: ModelStrings = DEFAULT_AGENT_MODEL,
     listener: Callable[[], AgentListener] | DefaultAgentListener | None = DEFAULT_AGENT_LISTENER,
     max_tokens: int | MaxTokens = MaxTokens.default(),
+    reasoning_effort: ReasoningEffort | None = None,
+    cache_ttl: CacheTTL | None = None,
     _logging: bool = False,
 ) -> Callable[[Callable[I, O]], Callable[I, O]]:
     """
@@ -90,6 +92,13 @@ def agentic[**I, O](
     max_tokens : int | MaxTokens
         When an integer is supplied, this is the maximum number of tokens for an invocation.
         For more fine-grained control, a `MaxTokens` object may be passed.
+    reasoning_effort : 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | None
+        Constrains thinking budget on reasoning models which support it (gpt 5.2, sonnet 4.5, gemini 3, etc...)
+        Higher values use more reasoning tokens but may produce better results.
+        If None, uses the model's default reasoning effort.
+    cache_ttl : '5m' | '1h' | None
+        Controls how long Anthropic prompt caching entries persist.
+        Only used for Anthropic models; ignored for other providers.
 
     Returns
     -------
@@ -129,6 +138,8 @@ def agentic[**I, O](
             max_tokens=max_tokens,
             logging=_logging,
             mcp=mcp,
+            reasoning_effort=reasoning_effort,
+            cache_ttl=cache_ttl,
         )
 
         return mf

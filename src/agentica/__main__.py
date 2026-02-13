@@ -816,7 +816,7 @@ async def fake_intro():
     intro = """
     Hey! I'm an agent created with the Agentica framework.
 
-    Would you like me to see me demonstrate any of the following?
+    Would you like to see me demonstrate any of the following?
 
     [hlb]A[/hlb]: Tool use without MCP
     [hlb]B[/hlb]: Multi agent orchestration

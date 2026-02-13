@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.12.0, <3.14.0"
 resolution-markers = [
     "python_full_version >= '3.13'",
@@ -23,12 +23,12 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "httpx", specifier = ">=0.28.0,<1.0.0" },
     { name = "msgspec", specifier = ">=0.19.0" },
     { name = "opentelemetry-api", specifier = ">=1.20.0" },
     { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.20.0" },
     { name = "opentelemetry-sdk", specifier = ">=1.20.0" },
-    { name = "rich", specifier = ">=14.1.0" },
+    { name = "rich", specifier = ">=13.0.0" },
     { name = "trio", specifier = ">=0.31.0" },
     { name = "typing-extensions", specifier = ">=4.15.0" },
     { name = "xxhash", specifier = ">=3.5.0" },
@@ -662,17 +662,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d9/02/111134bfeb6e6c7ac4c74594e39a59f6c0195dc4846afbeac3cba60f1927/docutils-0.22.3.tar.gz", hash = "sha256:21486ae730e4ca9f622677b1412b879af1791efcfba517e4c6f60be543fc8cdd", size = 2290153, upload-time = "2025-11-06T02:35:55.655Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/11/a8/c6a4b901d17399c77cd81fb001ce8961e9f5e04d3daf27e8925cb012e163/docutils-0.22.3-py3-none-any.whl", hash = "sha256:bd772e4aca73aff037958d44f2be5229ded4c09927fcf8690c577b66234d6ceb", size = 633032, upload-time = "2025-11-06T02:35:52.391Z" },
-]
-
-[[package]]
-name = "dotenv"
-version = "0.9.9"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "python-dotenv" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/b2/b7/545d2c10c1fc15e48653c91efde329a790f2eecfbbf2bd16003b5db2bab0/dotenv-0.9.9-py2.py3-none-any.whl", hash = "sha256:29cf74a087b31dafdb5a446b6d7e11cbce8ed2741540e2339c69fbef92c94ce9", size = 1892, upload-time = "2025-02-19T22:15:01.647Z" },
 ]
 
 [[package]]
@@ -3186,7 +3175,6 @@ source = { editable = "." }
 dependencies = [
     { name = "agentica-internal" },
     { name = "aiohttp" },
-    { name = "dotenv" },
     { name = "fastmcp" },
     { name = "httpx" },
     { name = "openai" },
@@ -3197,6 +3185,7 @@ dependencies = [
     { name = "platformdirs" },
     { name = "prompt-toolkit" },
     { name = "pydantic" },
+    { name = "python-dotenv" },
     { name = "rich" },
     { name = "websockets" },
 ]
@@ -3231,20 +3220,20 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "agentica-internal", editable = "../../common" },
-    { name = "aiohttp", specifier = ">=3.12.15" },
-    { name = "dotenv", specifier = ">=0.9.9" },
-    { name = "fastmcp", specifier = "<=2.12.3" },
-    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "aiohttp", specifier = ">=3.12.0" },
+    { name = "fastmcp", specifier = ">=2.10.0,<3.0.0" },
+    { name = "httpx", specifier = ">=0.28.0,<1.0.0" },
     { name = "openai", specifier = ">=1.66.0" },
     { name = "opentelemetry-api", specifier = ">=1.20.0" },
     { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.20.0" },
     { name = "opentelemetry-instrumentation-httpx", specifier = ">=0.41b0" },
     { name = "opentelemetry-sdk", specifier = ">=1.20.0" },
     { name = "platformdirs", specifier = ">=4.5.0" },
-    { name = "prompt-toolkit", specifier = ">=3.0.52" },
-    { name = "pydantic", specifier = ">=2.12.4" },
-    { name = "rich", specifier = ">=14.2.0" },
-    { name = "websockets", specifier = ">=15.0.1" },
+    { name = "prompt-toolkit", specifier = ">=3.0.0" },
+    { name = "pydantic", specifier = ">=2.10.0" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "rich", specifier = ">=13.0.0" },
+    { name = "websockets", specifier = ">=15.0.0" },
 ]
 
 [package.metadata.requires-dev]

@@ -13,13 +13,18 @@ from agentica_internal.warpc import forbidden
 from agentica_internal.warpc.worlds.sdk_world import SDKWorld
 from openai.types.responses import ResponseUsage
 
-from agentica.agent import DEFAULT_AGENT_LISTENER, DefaultAgentListener
+from agentica.agent import DEFAULT_AGENT_LISTENER, Agent, DefaultAgentListener
 from agentica.client_session_manager import INVALID_UID
 from agentica.coming_soon import check_return_type_supported
+from agentica.common import (
+    DEFAULT_AGENT_MODEL,
+    CacheTTL,
+    MaxTokens,
+    ModelStrings,
+    ReasoningEffort,
+    sum_usages,
+)
 from agentica.logging.agent_listener import AgentListener
-
-from .agent import Agent
-from .common import DEFAULT_AGENT_MODEL, MaxTokens, ModelStrings, sum_usages
 
 __all__ = ['AgenticFunction']
 
@@ -45,6 +50,8 @@ class AgenticFunction[**I, O](LogBase):
     __model: ModelStrings
     __max_tokens: MaxTokens
     __listener_constructor: Callable[[], AgentListener] | DefaultAgentListener | None
+    __reasoning_effort: ReasoningEffort | None
+    __cache_ttl: CacheTTL | None
     __logging: bool
     __return_type: type[O]
     __cached_globals_world: SDKWorld | None
@@ -83,6 +90,8 @@ class AgenticFunction[**I, O](LogBase):
         | DefaultAgentListener
         | None = DEFAULT_AGENT_LISTENER,
         logging: bool = False,
+        reasoning_effort: ReasoningEffort | None = None,
+        cache_ttl: CacheTTL | None = None,
     ):
         # Agentica - Initialize LogBase
         super().__init__(logging=logging)
@@ -97,6 +106,8 @@ class AgenticFunction[**I, O](LogBase):
         self.__max_tokens = MaxTokens.from_max_tokens(max_tokens)
         self.__mcp = mcp
         self.__listener_constructor = listener
+        self.__reasoning_effort = reasoning_effort
+        self.__cache_ttl = cache_ttl
         self.__cached_globals_world = None
         self.__cached_globals_payload = None
         # Python
@@ -152,6 +163,8 @@ class AgenticFunction[**I, O](LogBase):
             model=self.__model,
             listener=self.__listener_constructor,
             max_tokens=self.__max_tokens,
+            reasoning_effort=self.__reasoning_effort,
+            cache_ttl=self.__cache_ttl,
             _logging=self.logging,
             _world=world,
             _role='function',  # needed to tell ReplAgent which case it is in

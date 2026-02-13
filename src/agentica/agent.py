@@ -711,6 +711,7 @@ class Agent(LogBase):
         return _AgentInvocation(self.__uid, mai_handle.iid, self._world, mai_handle, self.log, self._listener)
 
     async def close(self) -> None:
+        """Close the agent, releasing its resources on the session manager."""
         # global listener cleanup
         if hasattr(self, '_listener'):
             if self._listener is not None:
@@ -727,6 +728,7 @@ class Agent(LogBase):
             pass
 
     def sync_close(self) -> None:
+        """Best-effort synchronous close. Prefer ``close()`` in async contexts."""
         # try to send destroy to session manager
         try:
             loop = asyncio.get_event_loop()
